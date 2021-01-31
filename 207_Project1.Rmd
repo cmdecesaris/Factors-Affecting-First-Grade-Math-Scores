@@ -1,0 +1,888 @@
+---
+title: "Factors Affecting Math Scores in the First Grade"
+author: "Christina De Cesaris, 913819951, Team 3"
+output:
+  html_document:
+    df_print: paged
+    number_sections: yes
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.pos = 'H')
+knitr::opts_chunk$set(echo=FALSE)
+
+```
+
+
+
+# Abstract 
+
+Using data from Project Star, the Math Scores of 339 first grade classes were summarized then used as response variables for a two-way anova model with Class Type and School ID as predictors. Then the summarized data was aggregated by school and fit to a one-way anova model to evaluate the effect of Urbanicity on Math Scores. Small classes were found to have signifiantly higher Mean and 25th Quantile Math Score than regular sized classes and regular sized classes with teaching aids. There was no difference found between scores in regular classes with or without aids. From the Urbanicty model, inner-city schools were found to have significantly lower Mean Math Scores compared to rural, suburban, and urban schools. There was no signifiant difference in scores between rural, suburban, and urban schools. 
+
+# Introduction
+
+
+Determining which factors influence academic achievement has long been the target of educational research. In general, smaller class sizes have been linked to higher academic performance (Nye et al., 2000). Another study conducted in 2011 concluded that smaller class sizes were beneficial for students with a history of low academic achievement (Blatchford et al., 2011). Further research has suggested the addition of trained classroom aids had a positive effect on the test scores of students with disabilities, but otherwise had no effect on students without disabilities. (Gerber et al., 2001)
+
+In this project, I will explore the data collected from the Tennessee Student/Teacher Achievement Ratio study (Project STAR) in order to analyze the relationship between class size and student performance in math. Project Star was conducted in the late 1980s and lasted for four years. Students in grades k-3 from 79 schools were randomly assigned to classrooms of varying sizes. The classrooms consisted of three types: small, regular, and regular plus a teacher's aid.
+
+I aim to determine the effect Class Type on Mean Math Scores for first grade class. In the case of this study, Mean Math Score represents the average scaled class math scores for the first grade teachers.
+
+I will further investigate whether the addition of a teacher's aid in a regular sized classrooms had any significant difference on Mean Math Scores compared to regular sized classrooms without an aid. I will then repeat the study using the 25th Quantile Math Score as an outcome in order to determine a relationship between Class Types and test performace in the lowest quartile. 
+
+Additionally, the effect of a schools surrounding environment and academic achievement is of equal interest. Evidence suggests there is little difference in the academic achievement of rural students compared to urban students (Borland & Howsen, 1999). Project Star Data provides four categories for Urbanicity: Inner-City, Rural, Urban, and Suburban. I aim to analyze whether School Urbanicity has a significant effect on first grade Math scores. 
+
+
+I seek to answer the following questions:
+
+**1.** Is there a difference in Mean Math Scores in 1st grade across Class Types?
+  
+
+  - Which Class Type is associated with the highest Mean Math Scores in 1st grade? 
+  
+  - Do the conclusions for the model predicting on Mean Math Scores hold the same when Median and 25th Quantile Math Scores are used?
+  
+  - Does the addition of an Aid cause a significant difference in Math Scores compared to a regular sized class with no aid? 
+  
+**2.** Is there a difference in Mean Math Scores in 1st grade across Urbanicity?
+
+  - Which Urbanicities are associated with the highest and lowest Math Scores?
+
+
+ 
+# Background 
+
+The data used in this project was collected from participating Tennessee Schools with classes in grades K-3. Schools were required to have student body size that could form at least one Class Type, and a total of 79 schools met these requirements. Inner-city, urban, suburban, and rural surrounded schools were included in the study to ensure a diverse demographic of students was present. 
+
+Small class types consisted of about 15-17 students while regular class types contained around 22-25. Both students and teachers within each school were assigned randomly to their classes. Students were assessed by Stanford Achievement Tests in reading and math. By the end of the study, results from 339 first grade classes from 76 schools was completed.
+
+The complete data set downloaded from Harvard Dataverse contained 11,601 student entries with 379 features;it consisted of both data from the Star Project and data from late follow up studies. Data regarding student attendance, test scores, graduation rate, school location etc. was collected over the course of the study and was later made public.   
+
+For the purpose of this project, the Math Scores of students in the first grade were aggregated by their Teacher's ID, School ID, and Class Type. Entries with missing variables were dropped, and the resulting data used for this study included 76 schools, 6,598 first graders, and 339 teachers. The mean, median, standard deviation, and quantiles of student Math Scores were calculated for each teacher's class. These statistics are summarized in the charts below. 
+
+
+# Class Type Models
+
+
+```{r Libraries, message=FALSE, warning=FALSE, include=FALSE}
+library(AER)
+library(dplyr)
+library(tidyverse)
+library(haven)
+library(gplots)
+library(DT) # interactive summary stats
+library(agricolae) #Tukey
+library(car) #Levine
+```
+
+
+## Descriptive Analysis
+
+```{r Data Pre-processing, message=FALSE, warning=FALSE, include=FALSE}
+data = read_sav("STAR_Students.sav")
+
+data=as.data.frame(data)
+attach(data) #G1SCHID
+dim(data)
+fgrade = data%>%select(g1tchid,g1tmathss,g1surban,g1classtype,g1schid) 
+#class(fgrade)
+dim(fgrade)
+str(fgrade)
+fgrade=drop_na(fgrade) #get rid of NA
+colnames(fgrade)=c("tid","mathss","schoolt","classt","schoolid")
+#fgrade
+str(fgrade)
+```
+
+Summary statistics were compiled for each teacher (class) participating in the first grade study. Table 1 summarizes the Class Type and Math Score: mean, median, max, min, standard deviation and quartiles for each teacher. The teachers in Table 1 have been grouped by their respective School ID's which happen to also be the first 6 digits of their teacher ID. In this study, I will focus on the **Mean Math Score** and later the **25th Quantile Math Score** as the predicted response variable. Other summary statistics are provided for convenience and data exploration. 
+
+```{r Teacher Summary Statistics T1, message=FALSE, warning=FALSE}
+#Cool interaction tables I enjoy making. These are from the DT datatables package which is commonly used in html and java but this one is useable in R
+
+summary_stats_teacher<-fgrade %>% #we will use THIS for our Anova model
+  group_by(tid,schoolid,classt) %>%
+  summarize(mean_score = signif(mean(mathss, na.rm = TRUE), digits=5), min= min(mathss, na.rm=TRUE), max= max(mathss, na.rm=TRUE),StandardD=signif(sd(mathss, na.rm=TRUE), digits=4),Q25=quantile(mathss,probs = 0.25,na.rm = TRUE), Median=quantile(mathss,probs = 0.50,na.rm = TRUE),Q75=quantile(mathss,probs = 0.75,na.rm = TRUE)) 
+#head(summary_stats_teacher)
+#colnames(summary_stats)=c('Teacher ID','Mean Scaled Score', 'Min Score','Max #Score','Standard Deviation','Quantile 25','Median','Quantile 75')
+
+datatable(summary_stats_teacher,class = 'cell-border stripe', 
+ caption = htmltools::tags$caption(
+    style = 'caption-side: bottom; text-align: center;',
+    'Table 1: ', htmltools::em('Summary statistics of Math Scores for 1st grade teachers grouped by school ID')),colnames = c('Teacher ID','School ID','Class Type','Mean Score', 'Min Score','Max Score','Standard Deviation','Quantile 25','Median','Quantile 75'),extensions = 'RowGroup',options = list(rowGroup = list(dataSrc=c(2)), 
+                         columnDefs = list(list(visible=F, targets=c(2)))
+                         ))
+
+
+
+```
+
+ Table 2 summarizes the Math Score: mean, median, max, min, standard deviation and quartiles for each school. Class Type is not included in this table, because there were multiple Class Types for each school.
+```{r School ID Summary Statistics T2, message=FALSE, warning=FALSE}
+
+
+summary_stats_schid<-fgrade %>%
+  group_by(schoolid) %>%
+  summarize(mean_score = signif(mean(mathss, na.rm = TRUE), digits=5), min= min(mathss, na.rm=TRUE), max= max(mathss, na.rm=TRUE),StandardD=signif(sd(mathss, na.rm=TRUE), digits=4),Q25=quantile(mathss,probs = 0.25,na.rm = TRUE), Median=quantile(mathss,probs = 0.50,na.rm = TRUE),Q75=quantile(mathss,probs = 0.75,na.rm = TRUE)) 
+
+#colnames(summary_stats)=c('Teacher ID','Mean Scaled Score', 'Min Score','Max #Score','Standard Deviation','Quantile 25','Median','Quantile 75')
+
+datatable(summary_stats_schid,class = 'cell-border stripe', 
+ caption = htmltools::tags$caption(
+    style = 'caption-side: bottom; text-align: center;',
+    'Table 2: ', htmltools::em('Summary statistics of Math Scores for 1st graders by school ID')),colnames = c('School ID','Mean Score', 'Min Score','Max Score','Standard Deviation','Quantile 25','Median','Quantile 75'))
+
+
+
+```
+
+Our main question of interest focuses on whether there is a Class Type associated with higher Math Scores. Table 3 summarizes the Math Scores statistics grouped by Class Type. We find Class Type 1 (small) to have the highest values among most categories. 
+```{r Class Type Summary Statistics T3, message=FALSE, warning=FALSE}
+#Class Type
+summary_stats_classt<-fgrade %>%
+  group_by(classt) %>%
+  summarize(mean_score = signif(mean(mathss, na.rm = TRUE), digits=5), min= min(mathss, na.rm=TRUE), max= max(mathss, na.rm=TRUE),StandardD=signif(sd(mathss, na.rm=TRUE), digits=4),Q25=quantile(mathss,probs = 0.25,na.rm = TRUE), Median=quantile(mathss,probs = 0.50,na.rm = TRUE),Q75=quantile(mathss,probs = 0.75,na.rm = TRUE)) 
+
+#Class Types: 1-Small, 2-Regular, 3-Regular + Aid
+datatable(summary_stats_classt,class = 'cell-border stripe', 
+ caption = htmltools::tags$caption(
+    style = 'caption-side: bottom; text-align: center;',
+    'Table 3: ', htmltools::em('Summary statistics of scaled math scores by Class Type')),colnames = c('Class Type Code','Mean Score', 'Min Score','Max Score','Standard Deviation','Quantile 25','Median','Quantile 75'), rownames = c("Small", "Regular","Regular w/ Aid"),  options = list(sDom  = 't'))
+
+
+```
+
+
+
+
+
+A in the boxplot comparison of Math Scores across Class Type, small classes lead.
+ 
+```{r Boxplots Class Type}
+
+#Class Type
+ggplot(fgrade, aes(factor(classt), mathss, fill=factor(classt))) + geom_boxplot()+
+  labs(title="Plot of Math Scores by Class Type",x="Class Type", y = "Scaled Math Scores")+ scale_x_discrete(labels=c("Small", "Regular", "Regular w/ Aid"))+
+  scale_fill_discrete(name = "Class Type", labels = c("Small", "Regular", "Regular w/ Aid"))
+```
+
+
+
+A comparison of all Math Scores across all Schools regardless of Class Type. In general Math Scores are not highly variable accross different schools, and most of the Mean Math Scores fall between 480 and 550.
+
+```{r Boxplots School ID, fig.width=10}
+#School ID's, this really doesn't tell us much of anything
+ggplot(fgrade, aes(factor(schoolid), mathss , fill=factor(schoolid))) + geom_boxplot()+
+  labs(title="Plot of Math Scores by School ID",x="School ID", y = "Scaled Math Scores") +theme(text = element_text(size=8,face = 'bold'),
+        axis.text.x = element_text(angle=75, hjust=1),axis.ticks.x = element_line(size=0.5))+scale_x_discrete(guide = guide_axis(n.dodge = 1),expand=c(0, 0))+scale_fill_discrete(name = "School ID")
+
+#  theme(axis.ticks.length =unit(1.5,"mm"),axis.ticks.y = element_line(size=0.5))
+
+```
+
+
+Due to the large number of schools, a dot graph approach was taken to portray the differences between average scores for each Class Type across each school. In most cases, small classes lead in average scores. The graph does not demonstrate a clear difference in the scores earned regular classes vs. regular classes with aids.
+
+```{r fig.width=15, message=FALSE, warning=FALSE}
+
+summary_stats_schid2<-fgrade %>%
+  group_by(schoolid, classt) %>%
+  summarize(mean_score = signif(mean(mathss, na.rm = TRUE), digits=5), min= min(mathss, na.rm=TRUE), max= max(mathss, na.rm=TRUE),StandardD=signif(sd(mathss, na.rm=TRUE), digits=4),Q25=quantile(mathss,probs = 0.25,na.rm = TRUE), Median=quantile(mathss,probs = 0.50,na.rm = TRUE),Q75=quantile(mathss,probs = 0.75,na.rm = TRUE)) 
+
+
+
+ggplot(summary_stats_schid2, aes(factor(schoolid), mean_score )) + geom_point(aes(color = factor(classt)),size=3 )+labs(x="Quantiles: Min to Max, 25% increments w/ School ID", y="Mean Math Scores",  
+       col="Class Type",title="Mean Scores by Class Type and Quantile")+  scale_color_manual(labels = c("Small", "Regular",'Regular+Aid'), values = c("blue", "red",'green'))+theme(text = element_text(size=8,face = 'bold'),
+        axis.text.x = element_text(angle=75, hjust=1),axis.ticks.x = element_line(size=0.5))+scale_x_discrete(guide = guide_axis(n.dodge = 1),expand=c(0, 0))+ geom_line()
+#+
+
+```
+
+
+
+The graph above is still cumbersome; a simplified graph follows. The average Math Score was calculated for each school. The total averages were ordered by quantile. The ID for the schools at each quantile was collected and the average score among each of that school's Class Type was plotted. Unsurprisingly, small Class Type appears to lead for all the charted schools except the minimum. 
+
+
+```{r Dot Plot Scores at Each Quantile for School}
+
+
+
+                        
+
+maxi=summary_stats_schid%>% arrange(desc( mean_score))%>%slice(1)%>% as.data.frame()
+
+mini=summary_stats_schid%>% arrange( mean_score)%>%slice(1)%>% as.data.frame()
+#mini
+
+median=summary_stats_schid%>% arrange(desc( mean_score))%>%slice(38)%>% as.data.frame()
+
+
+q25=summary_stats_schid%>% arrange( mean_score)%>%slice(19)%>% as.data.frame()
+
+
+q75=summary_stats_schid%>% arrange( mean_score)%>%slice(57)%>% as.data.frame()
+
+
+#quantile(summary_stats_schid$mean_score, probs = seq(0, 1, 0.25), na.rm = F,type=5)
+#max mean score 228606	570.69	490	653		
+#lowest score 244728	489.43	444	578
+#median score
+##median(summary_stats_schid$mean_score)
+
+
+quants =rbind(mini,q25,median,q75,maxi)
+level_order <- c(quants$schoolid)
+#level_order
+
+
+quants_sum=summary_stats_schid2%>%filter(schoolid==quants$schoolid[1] | schoolid==quants$schoolid[2]|schoolid==quants$schoolid[3]|schoolid==quants$schoolid[4]|schoolid==quants$schoolid[5])%>% arrange(desc=mean_score)
+quants_sum=as.data.frame(quants_sum)
+
+
+ggplot(quants_sum, aes(factor(schoolid, level=level_order), mean_score )) + geom_point(aes(color = factor(classt)),size=3 )+labs(x="Quantiles: Min to Max, 25% increments w/ School ID", y="Mean Math Scores",  
+       col="Class Type",title="Mean Scores by Class Type and Quantile")+  scale_color_manual(labels = c("Small", "Regular",'Regular+Aid'), values = c("blue", "red",'green'))+scale_x_discrete(labels=c("Min: 244728", "Q25: 128079", "Median:244727","Q75: 205491", "Max:228606"))+ geom_line()+theme(axis.text.x = element_text(angle=45,hjust=1))
+#+
+```
+
+
+## Inferential analysis 
+
+
+
+
+__Two-Way Anova Model Definition__
+
+In this project, we define the two-way ANOVA model for predicting **Mean Math Score** on **Class Type** and **School ID** as:
+
+
+$Y_{ijk} = \mu_{..} + \alpha_{i} + \beta_{j} + \epsilon_{ijk}$, where the index $i$ represents the Class Type: small ($i=1$), regular ($i=2$), regular with aide ($i=3$), and the index $j$ represents the school indicator for the model involving Class Type and school ID. Note that the error terms $\{\epsilon_{ij}\}$ are i.i.d. $N(0,\sigma^2)$  
+
+For this Two-Way Anova model, I assume
+  - Variance of $\epsilon_{ij}$ error terms are equal
+  - $\epsilon_{ij}$ error terms are independent
+  - $\epsilon_{ij}$ error terms are normally distributed
+  - There are no samples in our data that deviates vastly from the model (no outliers)
+  - Our model is complete without any missing variables
+  - There is equal variance across factor groups
+
+The total mean among all levels of both groups is then defined as
+$$
+\mu_{\cdot \cdot} =\sum_{i=1}^a \sum_{j=1}^ b \mu_{ij}/(ab)$$
+And the means for each group is:
+
+$$\ \mu_{i\cdot} = \sum_{j=1}^b \mu_{ij} /b, \ \mu_{\cdot j}=\sum_{i=1}^a \mu_{ij}/a
+$$
+In the case above, if $i=1$, $\mu_{1\cdot}$ would be the average Mean Math Score for small class sizes across all schools. On the other hand if $j=1$, $\mu_{\cdot j}$ would represent the average Mean Math Score for the school indicated by index 1 across all its Class Types. 
+
+
+We define the factor effects in this model as: 
+$$
+\alpha_i=\mu_{i\cdot} - \mu_{\cdot \cdot},\ \beta_j=\mu_{\cdot j}-\mu_{\cdot\cdot}
+$$
+With the natural constraints:
+$$\sum^a_i{\alpha_i} = \sum^b_j {\beta_j=0}\\$$
+
+Where in the case of the Class Type-School ID model, $a=3$ for each of the three Class Types and $b=76$ for each of the 76 schools.
+
+As stated above, our final factor effect then model becomes:
+$$
+Y_{ijk} = \mu_{\cdot\cdot} + \alpha_i+\beta_j +\epsilon_{ijk}, j=1,\ldots, 76, i=1,\ldots, 3,
+$$
+
+In this project, the interaction model is not explored. Interaction terms have been left out to improve model efficiency and reduce the number of unknown parameters in these models. It is possible that interactions between Class Type and school ID exist in this model. For example, a school which historically has high test scores may see improvement over other schools across all Class Types but especially the small Class Type. This logic holds for the SchoolID-Urbanicity model.
+
+
+
+The means plot for Class Type indicates an increase in average math scaled score among small classes. Regular classes appear to have the lowest average scores while regular sized classes with an aid had slightly higher mean scaled math scores than regular sized classes alone. 
+```{r Plot Means Class T}
+
+#names(summary_stats_teacher)
+plotmeans(mean_score~classt,data=summary_stats_teacher,xlab="Class Type",ylab="Mean Math Score", main="Main  effect, Class Types",legends=c("Small", "Regular",'Regular+Aid'),lwd=2,barwidth=2) 
+
+```
+
+
+
+### Two-Way Anova Model with **Mean Math Score** as Response
+
+
+```{r Two-Way Model Class Type and School ID, echo=TRUE}
+anova.fit_idclass<-aov(mean_score~factor(schoolid)+factor(classt),data=summary_stats_teacher); #anova table
+
+
+
+an=(summary(anova.fit_idclass))
+
+an
+```
+
+In the anova table above, the p-values for Class Type and School ID are $1.87*10^{-09}$ less than $2*10^{-16}$ respectively. This indicates that these is a significant difference in math scaled scores across the levels of Class Type and School IDs. 
+
+The fitted coefficients for Regular and Regular with Aid Class Types are:
+```{r}
+
+anova.fit_idclass$coefficients[77]#class Regular coefficient
+anova.fit_idclass$coefficients[78]#class Regular with Aid Class coefficient
+```
+
+In a linear sense, the response variables representing each Class Type and School ID can take the values 1 or zero. For example, when representing a regular class, the response variable for regular class will equal 1 while that for regular with aid will equal zero. There is no easily obtainable coefficient for small class type, and for simplicity, small class type is represented when the response variables of the other two class types equal 0. Both fitted coefficients for Regular and Regular with Aid classes are negative. Therefore, when a small class is present, the predicted value is less negative
+
+In the case of this study, the coefficients for School ID are not important as the main focus is on Class Types. However, School ID is also a factorial variable which will result in a larger or smaller response value depending on the value of its coefficent. 
+
+__Hypothesis Test__
+
+To evaluate the association between Class Type and Mean Math Scores, we will test to see if there is a significant difference in the Mean Math Score earned across Class Types. 
+
+To test this, we assume the following null hypothesis is true:
+
+The Mean Math Scores for each Class Type are equal. 
+That is:
+$H_0: \alpha_1=\alpha_2=\alpha_3=0 \qquad$
+This holds because when $\alpha_i$ is zero for all $i$'s, each group mean equals the total mean and therefore each group mean is equal. 
+
+Recall: $\alpha_i = \mu_{i.}- \mu_{..}$
+
+
+The alternative hypothesis states the Mean Math Score for each Class Type is not equal. 
+That is:
+$H_a: {\rm not \ all\ } \alpha_i\ for \ i=1,2,3 \ {\rm are\ zero}$
+
+```{r echo=TRUE}
+# The sum of all instances for each Class Type with teacher as unit
+sum(table(summary_stats_teacher$classt))
+```
+
+
+We use the $F^*=\frac{MSTR}{MSE}$ statistic which under our null hypothesis will follow the F-distribution with 2 and  that is: $F^{*}\sim F(1-\alpha;r-1, n_T-r)$ which in this case with $\alpha=0.05$ we get $F^{*}\sim F(0.95; 2, 396)$ under $H_0$. We will otherwise, reject the null if $F^* > F(0.95; 2, 396)$
+
+
+
+$F(0.95; 2, 396)$:
+```{r}
+round(qf(0.95,2,396),digits=3)
+
+```
+
+$F^*$
+```{r}
+round(summary(anova.fit_idclass)[[1]][1,4],digits=3)
+
+```
+
+Because $ 6.574 > 3.019$, we reject the null hypothesis at significance level $\alpha=0.05$ and conclude there is a significant association between Class Type and Mean Math Score for this data set. 
+
+__Pair-Wise Comparision of Means__
+
+Next we seek the Class Type associated with the highest mean Math Score.
+
+
+I will use the Turkey-Kramer method for a pairwise comparison of the Class Type means. 
+
+ 
+ The  $100(1−𝛼)$%  confidence interval for${\mu_k.−\mu_m.:k,m∈{1,2,3},k≠m}$ at level $\alpha=0.5)$   where $k$ and $m$ represent different Class Types, is
+$$\bar{Y}_{k\cdot} - \bar{Y}_{m \cdot} \mp T s\big( \bar{Y}_{k\cdot} -\bar{Y}_{m\cdot} \big), \ k\neq m, \ T=\frac{1}{\sqrt{2}} q(1-\alpha; r, n_{total}-r)$$
+
+where  𝑞  is the studentized range distribution.
+
+
+```{r Tukey Mean}
+
+
+tukey.t1 = TukeyHSD(anova.fit_idclass)
+#tukey.t1$`factor(classt)`#No clear highest mean due to confiendece interval width. Management and Technical are not statistically far enough apart at alpha=0.05
+
+datatable(round(tukey.t1$`factor(classt)`,digits = 5),class = 'cell-border stripe', 
+ caption = htmltools::tags$caption(
+    style = 'caption-side: bottom; text-align: center;',
+    'Table 5: ', htmltools::em('Class Type Pairwise Comparison on Mean Math Score')),colnames = c("Difference", "Lower Bound","Upper Bound","Adjusted p val"),  options = list(sDom  = 't'),rownames = c("Regular - Small", "Regular w/ Aid - Small","Regular w/ Aid - Regular"))
+ 
+#anova.fit_idclass
+tukey.t2 <- HSD.test(anova.fit_idclass,'factor(classt)',alpha=(0.05))
+
+tukey.t2$groups$`mean_score`=round(tukey.t2$groups$`mean_score`, digits=4)# Reiterates what was mentioned above except this method gives us the groupings, making it clearer that there is no occupation clear highest mean wage. Management and Technical are 'tied'
+
+datatable(tukey.t2$groups,class = 'cell-border stripe', 
+ caption = htmltools::tags$caption(
+    style = 'caption-side: bottom; text-align: center;',
+    'Table 6: ', htmltools::em('Significant Grouping of Class Types')),colnames = c("Average Mean Score", "Groups"),  options = list(sDom  = 't'),rownames = c("Small", "Regular w/ Aid","Regular"))
+ 
+
+```
+
+The Tukey-Kramer Test at the significance level $\alpha=0.05$ indicates the small Class Type has the highest Mean Math Score. It is individually grouped as the highest while regular and regular with aid class means are indistinguishable. 
+
+
+
+
+### Two-Way Anova Model with **25th Quantile Math Score** as Response
+
+
+
+Previous research mentioned in the introduction section has found evidence that teacher's aids are beneficial for low performing students. In an attempt to explore this concept within this data set, I will run a second Two-Way anova model using the **25th Quantile Math Score** as a response. Like before, **School ID** and **Class Type** will be used as predictors. 
+
+For this section, details will be kept to a minimum to avoid repetition. 
+
+
+
+```{r Two-Way Model Class Type and School ID Q25, echo=TRUE}
+
+
+anova.fit_idclass_m<-aov(Q25~factor(schoolid)+factor(classt),data=summary_stats_teacher); #anova table
+#names(summary_stats_teacher)
+#table(summary_stats_teacher$classt) #gives us the number of instances for Class Type. 
+an=as.matrix(summary(anova.fit_idclass_m)[[1]])
+
+datatable(round(an, digits=3),class = 'cell-border stripe', 
+ caption = htmltools::tags$caption(
+    style = 'caption-side: bottom; text-align: center;',
+    'Table 7: ', htmltools::em('Anova Summary on 25th Quantile Score')),  options = list(sDom  = 't'),rownames = c('School ID','Class Type','Residuals'))
+
+```
+
+```{r}
+anova.fit_idclass_m$coefficients[77]#Regular coefficient
+anova.fit_idclass_m$coefficients[78]#Regular plus Aid coefficient
+```
+As in the case with Mean Math Score, the coefficients for 25th Quantile Math Score are negative for both Regular and Regular with aid Class Types.
+
+__Hypothesis Test__
+
+
+Like previous, to evaluate the association between Class Type and 25th Quantile  Math Scores, we will test to see if there is a significant difference in the 25th Quantile Math Score earned across Class Types. 
+
+To test this, we assume the following null hypothesis is true:
+
+
+$H_0: \alpha_1=\alpha_2=\alpha_3=0 \qquad$
+
+
+
+The alternative hypothesis states the 25th Quantile Math Score for each Class Type is not equal. 
+
+$H_a: {\rm not \ all\ } \alpha_i\ for \ i=1,2,3 \ {\rm are\ zero}$
+
+
+
+We use the $F^*=\frac{MSTR}{MSE}$ statistic which under our null hypothesis will follow the F-distribution with 2 and  that is: $F^{*}\sim F(1-\alpha;r-1, n_T-r)$ which in this case with $\alpha=0.05$ we get $F^{*}\sim F(0.95; 2, 396)$ under $H_0$. We will otherwise, reject the null if $F^* > F(0.95; 2, 396)$
+
+
+
+$F(0.95; 2, 396)$:
+```{r}
+round(qf(0.95,2,396),digits=3)
+
+```
+
+$F^*$
+```{r}
+round(summary(anova.fit_idclass_m)[[1]][1,4],digits=3)
+
+```
+
+Because $ 5.556 > 3.019$, we reject the null hypothesis at significance level $\alpha=0.05$ and conclude there is a significant association between Class Type and 25th Quantile  Score for this data set. 
+
+From the hypothesis test we conclude there is a significant difference in 25th Quantile Scores across Class Types
+
+
+__Pair-Wise Comparision__
+```{r}
+
+
+tukey.t1 = TukeyHSD(anova.fit_idclass_m)
+#tukey.t1$`factor(classt)`#small class is highest mean
+
+
+datatable(round(tukey.t1$`factor(classt)`,digits = 5),class = 'cell-border stripe', 
+ caption = htmltools::tags$caption(
+    style = 'caption-side: bottom; text-align: center;',
+    'Table 8: ', htmltools::em('Class Type Pairwise Comparison on 25th Quantile Math Score')),colnames = c("Difference", "Lower Bound","Upper Bound","Adjusted p val"),  options = list(sDom  = 't'),rownames = c("Regular - Small", "Regular w/ Aid - Small","Regular w/ Aid - Regular"))
+
+tukey.t2 <- HSD.test(anova.fit_idclass_m,'factor(classt)',alpha=(0.05))
+
+
+datatable(tukey.t2$groups,class = 'cell-border stripe', 
+ caption = htmltools::tags$caption(
+    style = 'caption-side: bottom; text-align: center;',
+    'Table 9: ', htmltools::em('Significant Grouping of Class Types')),colnames = c("25th Quantile Score", "Groups"),  options = list(sDom  = 't'),rownames = c("Small", "Regular w/ Aid","Regular"))
+ 
+
+```
+
+
+Results fro the Tucky-Kramer test indicate there is no significance difference in Q25th quantile scores between regular sized classes and regular sized classes with an aid present. 
+
+
+
+
+## Sensitivity analysis 
+
+To verify the credibility of the models, I must test each of the assumptions previously stated. The diagnostics for the first model will be step-by-step in depth. To avoid excessive repetition, the other models will have a simplified version of model sensitivity analysis. 
+
+### Mean Score Model 
+
+__Model Diagnostic Plots__
+
+  
+
+1. $\epsilon_{ij}$ error terms are independent
+
+```{r}
+
+plot(anova.fit_idclass, which=1)
+
+```
+
+The residuals appear independatnly distributed with no clear pattern to indicate non-linearity. 
+
+2. $\epsilon_{ij}$ error terms are normally distributed
+
+```{r}
+plot(anova.fit_idclass, which=2)
+
+```
+
+The Q-Q chart indicates the error terms are roughly normally distributed $N(0,\sigma^2)$ The data has some heavy tails on each end but nothing which raises major concern. 
+
+
+
+3. There are no samples in our data that deviates vastly from the model (no outliers)
+
+```{r}
+
+par(mfrow=c(1,2))
+plot(anova.fit_idclass, which=c(1,4))
+
+```
+
+The high leverage points identified here do not match any of the deviating values identified in the residuals plot. I assume there are no significant outliers in this model. 
+
+
+__Equal Variance__
+
+4. Variance of $\epsilon_{ij}$ error terms are equal (this assumption is also assessed by the residuals plot)
+5. There is equal variance across factor groups
+
+The Levene test is a one- way test used to asses the homogeneity of variance. 
+
+The null hypothesis for the Levene test states the variances across each group are equal. 
+$\sigma_{1}^{2} = \sigma_{2}^{2} = \ldots = \sigma_{a}^{2}$
+
+The alternative hypothesis states:
+$\sigma_{i}^{2} \ne \sigma_{j}^{2}$ for at least two groups.
+
+The test statistic F is calculated by fitting a one way anova model for each group, calculating $d_{ik}=|Y_{ik}-\tilde{Y}_{i\cdot}|$ where $\tilde{Y}_{i\cdot}$ is the group median The $d_{ik}$ values are then fitted as the response against its categorical group.
+We reject the null $H_0$ if $F^*>F(1-\alpha; r-1, n_T-r)$. 
+
+A less involved way to perform this test is by using the leveneTest() function from the car package which uses group median as the default.  
+
+
+
+```{r Equal Variance test, echo=TRUE}
+
+
+leveneTest(mean_score~factor(classt),summary_stats_teacher)
+
+
+
+leveneTest(mean_score~factor(schoolid),summary_stats_teacher)
+
+
+
+
+```
+
+ The p values for both categorical groups suggest there is homogeneity across their respective sub groups when tested to significance level $\alpha=0.05$ The variance assumption is assumed not violated for this model.
+
+
+
+
+
+
+### 25th Quantile Score Model 
+
+__Diagnostic Plots__
+
+
+```{r Q25 Assumptions}
+par(mfrow=c(2,2))
+plot(anova.fit_idclass_m)
+```
+
+Similar to the Mean Math Score model, the residuals for the 25th Quantile Math Score model appear independently distributed with no clear pattern to indicate non-linearity.
+The Q-Q chart indicates the error terms are normally distributed $N(0,\sigma^2)$. The error terms are more normally distributed in this model than the prior. 
+There does not appear to be any significant outliers which high influence on the model. 
+
+
+__Equal Variance Assumption__
+
+```{r echo=TRUE}
+leveneTest(Q25~factor(classt), summary_stats_teacher)
+
+leveneTest(Q25~factor(schoolid), summary_stats_teacher)
+
+```
+
+The results of the Levene Test on both Class Type and School ID indicate there is homogeneity of variance in both groups, and the variance assumption is not violated for this model. 
+
+
+# Urbanicity Extended Study One-Way Anova
+
+## Descriptive Analysis
+
+To explore the effect of Urbanicity on Math Scores, Table 4 summarizes Math Score statistics by school urban setting. We find Inner-City schools have the lowest scores in regard to mean and quantiles. 
+
+```{r School Type Summary Statistics T4, message=FALSE, warning=FALSE}
+#School Type
+summary_stats_schoolt<-fgrade %>%
+  group_by(schoolt) %>%
+  summarize(mean_score = signif(mean(mathss, na.rm = TRUE), digits=5), min= min(mathss, na.rm=TRUE), max= max(mathss, na.rm=TRUE),StandardD=signif(sd(mathss, na.rm=TRUE), digits=4),Q25=quantile(mathss,probs = 0.25,na.rm = TRUE), Median=quantile(mathss,probs = 0.50,na.rm = TRUE),Q75=quantile(mathss,probs = 0.75,na.rm = TRUE)) 
+
+
+#Schoolt: 1-inner city, 2-suburban, 3-rural, 4-urban
+datatable(summary_stats_schoolt,class = 'cell-border stripe', 
+ caption = htmltools::tags$caption(
+    style = 'caption-side: bottom; text-align: center;',
+    'Table 4: ', htmltools::em('Summary statistics of Math Scores by Urbanicity')),colnames = c('School Type Code','Mean Score', 'Min Score','Max Score','Standard Deviation','Quantile 25','Median','Quantile 75'),rownames=c("Inner City", "Suburban","Rural","Urban"))
+
+```
+
+The boxplots below compares Math Scores across Urbanicity. For each, setting, the Class Type has been separated. From the chart, it is difficult to determine whether there is significant difference between ruarl, urban, and suburban settings. Inner-city settings had the lowest Math Scores across all Class Types. For each setting, the apparent highest average Math Score is found in small Class Types. There does not appear to be a clear interaction between Class Type and Urbanicity. The following model will only consider Urbanicity as a predictor.
+
+```{r Boxplots School Urbanicity}
+
+#School urbanicity
+ggplot(fgrade, aes(factor(schoolt), mathss, fill=factor(schoolt))) + geom_boxplot()+
+  labs(title="Plot of Math Scores by School Enviroment",x="School Enviroment", y = "Scaled Math Scores")+ scale_x_discrete(labels=c("Inner City", "Suburban", "Rural","Urban"))+
+  scale_fill_discrete(name = "Class Type", labels = c("Inner City", "Suburban", "Rural","Urban"))
+```
+```{r Boxplots Class Type and Urbanicity}
+#
+#School type
+ggplot(fgrade, aes(factor(schoolt), mathss, fill=factor(classt))) + geom_boxplot()+
+  labs(title="Plot of Math Scores by School Urbanicity and Class Type",x="School Urbanicity", y = "Scaled Math Scores")+ scale_x_discrete(labels=c("Inner City", "Suburban", "Rural","Urban"))+
+  scale_fill_discrete(name = "Class Type", labels = c("Small", "Regular", "Regular w/ Aid"))
+```
+
+
+
+## Inferential Analysis
+
+The one-way Anova model for predicting **Mean Math Score** on **Urbanicity** is similar to the model which predicted on Class Type and School ID. In this model, the unit is school, not teacher, so Mean Math Scores will be aggregated by school. However, this is a One-Way Anova model. We define the model as follows:
+
+
+
+We denote the total levels for Urbanicty to be $a=4$. Denote $Y_{ij}$ to be the Math Score for the $j$th school for the $i$th Urbanicity where $j= 1,...,n_i$, and $i=1,2,3,4$.  $n_i$ represents the number of instances for a given Urbanicity $i$. 
+
+For example: When Urbanicity is Suburban ($i=2$) then $n_2 = 17$ and so on. For each level, there is a mean Math Score $\mu_i$ for each Urbanicity $i$ 
+
+```{r include=FALSE}
+
+summary_stats_schidu<-fgrade %>%
+  group_by(schoolid, schoolt) %>%
+  summarize(mean_score = signif(mean(mathss, na.rm = TRUE), digits=5), min= min(mathss, na.rm=TRUE), max= max(mathss, na.rm=TRUE),StandardD=signif(sd(mathss, na.rm=TRUE), digits=4),Q25=quantile(mathss,probs = 0.25,na.rm = TRUE), Median=quantile(mathss,probs = 0.50,na.rm = TRUE),Q75=quantile(mathss,probs = 0.75,na.rm = TRUE)) 
+
+factor(table(summary_stats_schidu$schoolt)) #number of schools in each category
+dim(summary_stats_schidu[summary_stats_schidu$schoolt==2,]) #  17 instances of suburban schools
+
+```
+
+The means plot for Urbanicity indicates Inner City schools have the lowest mean scaled math score on average compared to the other groups. Rural Schools have the highest average score closely followed by Suburban and Urban schools. The One-Way model is unbalanced--espically in the case of Urban schools were there is only seven schools in the study.
+
+
+```{r Plot Means Urbanicity }
+
+plotmeans(mean_score~factor(schoolt),data=summary_stats_schidu,xlab="Urbanicity",ylab="Mean Math Score", main="Main  effect, Urbanicity by School",legends=c("Inner City", "Suburban", "Rural","Urban"),lwd=2,barwidth=2,mean.labels = F) 
+
+
+```
+
+To fit this model, I used the data set which compiled the summary score statistics by school. In this case, the Urbanicity of the school will also be included. That is:
+
+```{r School ID Summary Statistics Urban}
+
+
+
+#colnames(summary_stats)=c('Teacher ID','Mean Scaled Score', 'Min Score','Max #Score','Standard Deviation','Quantile 25','Median','Quantile 75')
+
+datatable(summary_stats_schidu,class = 'cell-border stripe', 
+ caption = htmltools::tags$caption(
+    style = 'caption-side: bottom; text-align: center;',
+    'Table 2: ', htmltools::em('Summary statistics of Math Scores for 1st graders by school ID')),colnames = c('School ID','Urbanicity','Mean Score', 'Min Score','Max Score','Standard Deviation','Quantile 25','Median','Quantile 75'))
+
+
+
+```
+
+```{r Two-Way Model Class Type and School Urbanicity, include=FALSE}
+anova.fit_urbclass<-aov(mean_score~factor(schoolt),data=summary_stats_schidu); #anova table
+#summary(anova.fit_urbclass)
+anova.fit_urbclass
+an=summary(anova.fit_urbclass)
+an
+anova.fit_urbclass$coefficients
+```
+
+In the case of this model, coefficients for Urban, Suburban, and Rural locations are positive. Inner-city schools would tend to predicted values less than that of schools from other locations.
+
+
+__Hypothesis Test__
+
+To test if there is a significant association between Urbanicity and Math Score, we assume the following null hypothesis is true:
+
+The null hypothesis states that the Mean Math Scores for each Urbanicity is equal. 
+
+$H_0: \mu_1=\mu_2=\mu_3=\mu_4\qquad$
+
+Where as the alternative states the Mean Math Scores for each Urbanicity are not equal. 
+
+
+$H_a: {\rm not \ all\ } \mu_i\ for \ i=1,2...4 \ {\rm are\ equal}$
+
+
+
+We use the $F^*=\frac{MSTR}{MSE}$ statistic which under our null hypothsis will follow the F-distribution that is: $F^{*}\sim F(1-\alpha;r-1, n_T-r)$ which in this case with $\alpha=0.05$ we get $F^{*}\sim F(0.95; 3, 72)$ under $H_0$. We will otherwise, reject the null if $F^* > F(0.95; 3, 72)$
+
+
+
+$F(0.95; 5, 72)$:
+```{r}
+round(qf(0.95,3,72),digits=3)
+
+```
+
+$F^*$
+```{r}
+round(summary(anova.fit_urbclass)[[1]][1,4],digits=3)
+
+
+```
+
+Because $8.333 > 2.732$, that is $F^* > F(0.95; 3, 72)$, we reject the null hypothesis at significance level $\alpha=0.05$ and conclude there is a significant association between Urbanicity and Mean Math Scores for this data set. 
+
+__Pair-Wise Comparision__
+
+To explore wether there is a Urbanicity with a single highest or lowest mean, the pair-wise Tucky-Kramer test will again be employed:
+
+```{r}
+
+
+tukey.t1 = TukeyHSD(anova.fit_urbclass)
+#tukey.t1$`factor(classt)`#small class is highest mean
+
+
+datatable(tukey.t1$`factor(schoolt)`,class = 'cell-border stripe', 
+ caption = htmltools::tags$caption(
+    style = 'caption-side: bottom; text-align: center;',
+    'Table 8: ', htmltools::em('Urbanicity Pairwise Comparison on Mean Math Score')),colnames = c("Difference", "Lower Bound","Upper Bound","Adjusted p val"),  options = list(sDom  = 't'),rownames=c('Suburban - Inner-city','Rural - Inner-city','Urban - Inner-city',"Rural - Suburban", "Urban - Suburban", "Urban-Rural"))
+#,rownames = c("Regular - Small", "Regular w/ Aid - Small","Regular w/ Aid - Regular")
+
+tukey.t2 <- HSD.test(anova.fit_urbclass,'factor(schoolt)',alpha=(0.05))
+
+
+datatable(tukey.t2$groups,class = 'cell-border stripe', 
+ caption = htmltools::tags$caption(
+    style = 'caption-side: bottom; text-align: center;',
+    'Table 9: ', htmltools::em('Significant Grouping for Urbanicity')),rownames = c("Rural", "Suburban", "Urban","Inner-City"),options = list(sDom  = 't'))
+ 
+
+```
+
+The results from the Tucky-Kramer test indicates Inner-City scores as having a statistically lower Mean Math Score than the other three Urbanicity types. There is no clear highest Mean Math Score among Urban, Suburban, and Rural schools. 
+
+
+## Sensitivity Analysis
+
+__Diagnostic Plots__
+
+```{r}
+par(mfrow=c(2,2))
+plot(anova.fit_urbclass)
+```
+
+The residuals appear independatnly distributed with no clear pattern to indicate non-linearity.
+The Q-Q chart indicates the error terms are normally distributed $N(0,\sigma^2)$.
+The high leverage point 11 is both a residual outlier and a high leverage point. However, it does not appear to have enough influence to skew model.
+
+
+
+
+__Variance Assumptions__
+```{r echo=TRUE}
+leveneTest(mean_score~factor(schoolt),data=summary_stats_schidu)
+```
+
+The Levene's Test indicates the variance assumption (all groups have equal variance) is not violated as the p-value is insignificant at 0.3089. Overall, the model of Mean Math Score~Urbanicity is an adequate model. 
+
+
+
+
+ 
+
+
+
+
+
+
+# Discussion 
+
+Using data from Project Star, the math scores of 339 first grade classes were summarized then used as response variables for a two-way anova model with Class Type and School ID as predictors. The aim of the two-way Anova models was to determine whether there is a significant relationship between Class Type (small, regular, regular w/ aid) and Math Scores. This project also investigated the relationship between school environmental locations (Urbanicity) and summary Math Scores for each school. A significant difference in group means was concluded for each model at the level $\alpha=0.05$. As well, each model was assessed for how well it followed the model assumptions; every model used in this study was declared adequate.    
+
+Two-way anova models were fit with both Mean Math Scores and 25th Quantile Math Scores as response. In both cases, small sized classes were identified as being significantly related to higher Mean and 25th Quantile Math scores. The estimated difference in Math Scores for students in smaller classes was around twelve points for both models. 
+
+There was no significant difference between the Math Scores of classrooms with aids and without aids. In this dataset, aids were largely ineffective in terms of increasing Math Scores. A critical study of Project STAR suggests the aids in the STAR classrooms were a mixture of both trained teaching aids and classroom administrative aids (Gerber et al., 2001). Another study concludes that aids can be beneficial when they are properly trained and correctly utilized in the classroom setting (Sharma & Salend, 2016). With this in consideration, it is easy to see how the addition of aids in regular classes on Math Scores can be inconclusive, since not all teacher aids are interactive with the class. As well, an aid may be assigned to a specific student who's individual achievements may not change the class average significantly. Additional research with special attention to the duties and qualifications of teacher's aids is needed to properly conclude their effectiveness in the classroom. 
+
+Whether Uranicity had an effect on Math Scores was another question of interest. Previous research suggests there is no significant difference in academic performance between schools in rural and urban settings (Borland & Howsen, 1999). Project STAR data had four subgroups for Urbanicity: inner-city, rural, suburban, and urban. A one-way anova model was fit to analyze the relationship between Urbanicity and Mean Math Scores summarized by school. The results aligned with previous studies in regards to rural and urban schools. In fact, there was no significant difference between Mean Math Scores in rural, urban, and suburban schools. Inner-city schools, however, were identified as having the lowest Mean Math Scores. Compared to the other three groups, inner-city schools had an average difference of about twenty-two points. Further research is needed to investigate the reason for lower scores in inner-city schools.
+
+From this project, it appears school Urbanicity as well as Class Type plays an important role in academic achievement. To optimize student achievement, legislates should look into restricting class sizes and addressing the disparity in inner-city schools. 
+
+
+
+
+# Acknowledgement {-}
+
+
+- Winter 2020 Statistics 207 Piazza Board under Professor Shizhe Chen at UC Davis
+
+# Reference {-}
+
+
+
+Achilles, C.M., Helen, B., Bellott, F., Boyd-Zaharias, J., Finn, J., Folger, J.,  Johnston, J., Word, E. (2008). Tennessee's Student Teacher Achievement Ratio (STAR) project. Harvard Dataverse, V1.
+https://doi.org/10.7910/DVN/SIWH9F
+
+Blatchford, P., Bassett, P., & Brown, P. (2011). Examining the effect of class size on classroom engagement and teacher–pupil interaction: Differences in relation to pupil prior attainment and primary vs. secondary schools. Learning and Instruction, 21, 715-730.
+
+Borland, M., & Howsen, R. (1999). A Note on Student Academic Performance: In Rural versus Urban Areas. The American Journal of Economics and Sociology, 58(3), 537-546. Retrieved January 30, 2021, from http://www.jstor.org/stable/3487782
+
+Gerber, S. B., Finn, J. D., Achilles, C. M., & Boyd-Zaharias, J. (2001). Teacher Aides and Students’ Academic Achievement. Educational Evaluation and Policy Analysis, 23(2), 123–143. https://doi.org/10.3102/01623737023002123
+
+Imbens, G., & Rubin, D. (2015). Stratified Randomized Experiments. In Causal Inference for Statistics, Social, and Biomedical Sciences: An Introduction (pp. 187-218). Cambridge: Cambridge University Press. doi:10.1017/CBO9781139025751.010
+
+Nye, B., Hedges, L. V., & Konstantopoulos, S. (2000). The Effects of Small Classes on Academic Achievement: The Results of the Tennessee Class Size Experiment. American Educational Research Journal, 37(1), 123–151. https://doi.org/10.3102/00028312037001123
+
+Sharma, U., & Salend, S. J. (2016). Teaching Assistants in Inclusive Classrooms: A Systematic Analysis of
+the International Research. Australian Journal of Teacher Education, 41(8).
+http://dx.doi.org/10.14221/ajte.2016v41n8.7 
+
+
+
+# Session info {-}
+
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
